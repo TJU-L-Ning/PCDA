@@ -24,11 +24,10 @@ class ConvNextBase(nn.Module):
     def __init__(self, model_name="convnext_base"):
         super(ConvNextBase, self).__init__()
         
-        # 验证模型名称
+
         if model_name not in convnext_dict:
             raise ValueError(f"不支持的ConvNeXt模型: {model_name}。可选: {list(convnext_dict.keys())}")
-        
-        # 获取权重配置
+
         weights = {
             "convnext_tiny": models.ConvNeXt_Tiny_Weights.IMAGENET1K_V1,
             "convnext_small": models.ConvNeXt_Small_Weights.IMAGENET1K_V1,
@@ -36,7 +35,6 @@ class ConvNextBase(nn.Module):
             "convnext_large": models.ConvNeXt_Large_Weights.IMAGENET1K_V1
         }[model_name]
         
-        # 加载模型（仅特征部分）
         model_convnext = models.get_model(
             convnext_dict[model_name], weights=weights
         )
@@ -44,14 +42,11 @@ class ConvNextBase(nn.Module):
         self.features = model_convnext.features
         self.avgpool = model_convnext.avgpool
         
-        # 动态获取特征维度
         with torch.no_grad():
-            # 使用标准ImageNet尺寸
             dummy_input = torch.randn(1, 3, 224, 224)
             dummy_output = self.forward(dummy_input)
             self.backbone_feat_dim = dummy_output.shape[1]
             
-            # 清理缓存
             del dummy_input, dummy_output
             torch.cuda.empty_cache()
 
@@ -82,17 +77,16 @@ class ResBase(nn.Module):
         self.backbone_feat_dim = model_resnet.fc.in_features
 
     def forward(self, x):
-        #[200,3,224,224]
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
         x = self.layer1(x)
         x = self.layer2(x)
-        x = self.layer3(x)#[200,2048,14,14]
-        x = self.layer4(x)#[200,2048,7,7]
-        x = self.avgpool(x)#[200,2048,1,1]
-        x = x.view(x.size(0), -1)#[200,2048]
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
         return x
     
 class Embedding(nn.Module):
@@ -126,16 +120,16 @@ class Classifier(nn.Module):
             self.fc.apply(init_weights)
 
     def forward(self, x):
-        x = self.fc(x)#[B,Classes num]
+        x = self.fc(x)
         return x
     
 
 class SFUniDA(nn.Module):
     def __init__(self, args):
         super(SFUniDA, self).__init__()
-        self.backbone_arch = args.backbone_arch   # resnet50
-        self.embed_feat_dim = args.embed_feat_dim # 256
-        self.class_num = args.class_num           # 源域的总类别数
+        self.backbone_arch = args.backbone_arch   
+        self.embed_feat_dim = args.embed_feat_dim 
+        self.class_num = args.class_num           
 
         if "resnet" in self.backbone_arch:   
             self.backbone_layer = ResBase(self.backbone_arch) 
@@ -148,17 +142,15 @@ class SFUniDA(nn.Module):
         
         self.feat_embed_layer = Embedding(self.backbone_feat_dim, self.embed_feat_dim, type="bn")
         
-        self.class_layer = Classifier(self.embed_feat_dim, class_num=self.class_num, type="wn")  ##分类器
+        self.class_layer = Classifier(self.embed_feat_dim, class_num=self.class_num, type="wn")  
         
     def get_embed_feat(self, input_imgs):
-        # input_imgs [B, 3, H, W]
-
+       
         backbone_feat = self.backbone_layer(input_imgs)
         embed_feat = self.feat_embed_layer(backbone_feat)
         return embed_feat
     
     def forward(self, input_imgs, apply_softmax=True):
-        # input_imgs [B, 3, H, W]
         B, C, H, W = input_imgs.shape
         backbone_feat = self.backbone_layer(input_imgs)
         
@@ -167,6 +159,6 @@ class SFUniDA(nn.Module):
         cls_out = self.class_layer(embed_feat)
         
         if apply_softmax:
-            cls_out = torch.softmax(cls_out, dim=1) # [B,C]C是源域总类别
+            cls_out = torch.softmax(cls_out, dim=1) 
         
         return embed_feat, cls_out
