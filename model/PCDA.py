@@ -130,34 +130,23 @@ class SFUniDA(nn.Module):
         self.backbone_arch = args.backbone_arch   
         self.embed_feat_dim = args.embed_feat_dim 
         self.class_num = args.class_num           
-
         if "resnet" in self.backbone_arch:   
             self.backbone_layer = ResBase(self.backbone_arch) 
         elif "convnext" in self.backbone_arch:
             self.backbone_layer = ConvNextBase(self.backbone_arch)
         else:
             raise ValueError("Unknown Feature Backbone ARCH of {}".format(self.backbone_arch))
-        
         self.backbone_feat_dim = self.backbone_layer.backbone_feat_dim
         
         self.feat_embed_layer = Embedding(self.backbone_feat_dim, self.embed_feat_dim, type="bn")
         
         self.class_layer = Classifier(self.embed_feat_dim, class_num=self.class_num, type="wn")  
         
-    def get_embed_feat(self, input_imgs):
-       
-        backbone_feat = self.backbone_layer(input_imgs)
-        embed_feat = self.feat_embed_layer(backbone_feat)
-        return embed_feat
-    
+
     def forward(self, input_imgs, apply_softmax=True):
-        B, C, H, W = input_imgs.shape
         backbone_feat = self.backbone_layer(input_imgs)
-        
         embed_feat = self.feat_embed_layer(backbone_feat)
-        
         cls_out = self.class_layer(embed_feat)
-        
         if apply_softmax:
             cls_out = torch.softmax(cls_out, dim=1) 
         
